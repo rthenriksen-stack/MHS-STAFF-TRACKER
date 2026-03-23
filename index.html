@@ -643,7 +643,7 @@ function ProjectModal({ project, staff, onSave, onDelete, onClose }) {
               <div><Lbl t="Hrs/Wk"/><input style={inputSt} type="number" value={a.hours} onChange={e=>updA(idx,"hours",+e.target.value)}/></div>
               <button onClick={()=>setForm(f=>({...f,assignments:f.assignments.filter((_,i)=>i!==idx)}))} style={{ background:"none", border:"1px solid #f43f5e22", color:"#f43f5e", borderRadius:6, cursor:"pointer", marginTop:20, fontSize:14 }}>✕</button>
             </div>
-            <div style={{ marginBottom:10 }}><Lbl t="Tasks (comma-separated)"/><TaskInput value={a.tasks||[]} onChange={v=>updA(idx,"Task 1, Task 2, Task 3",v)} /></div>
+            <div style={{ marginBottom:10 }}><Lbl t="Tasks (comma-separated)"/><input style={inputSt} value={(a.tasks||[]).join(", ")} onChange={e=>updA(idx,"tasks",e.target.value.split(",").map(t=>t.trim()).filter(Boolean))} placeholder="Task 1, Task 2, Task 3"/></div>
             <div><Lbl t="Notes"/><input style={inputSt} value={a.notes||""} onChange={e=>updA(idx,"notes",e.target.value)} placeholder="Staffing context, flags, anything worth noting…"/></div>
           </div>
         ))}
