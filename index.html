@@ -60,10 +60,10 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React;
 const JSONBIN_BIN_ID  = "69c16c62b7ec241ddc963aad";
 const JSONBIN_API_KEY = "$2a$10$vsyB021q6qkIx7G7X/xLjOmyNMWw8TIyrezcrmREWnETMXRRvhEdW";
 
-const PRIORITIES     = ["High", "Medium", "Low"];
+const PRIORITIES     = ["High", "Medium", "Low", "On-Hold"];
 const STATUSES       = ["Active", "On Hold", "Complete", "Planning"];
-const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
-const PRIORITY_COLOR = { High: "#f43f5e", Medium: "#f59e0b", Low: "#22c55e" };
+const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2, "On-Hold": 3 };
+const PRIORITY_COLOR = { High: "#f43f5e", Medium: "#f59e0b", Low: "#22c55e", "On-Hold": "#94a3b8" };
 const STATUS_COLOR   = { Active: "#38bdf8", "On Hold": "#f59e0b", Complete: "#22c55e", Planning: "#a78bfa" };
 
 const DEFAULT_DATA = {
@@ -77,7 +77,7 @@ const DEFAULT_DATA = {
   projects: [
     {
       id: "p1", name: "Brand Refresh", projectId: "PRJ-001", client: "Acme Corp",
-      priority: "High", status: "Active", startDate: "2026-01-15", endDate: "2026-04-30",
+      priority: "High", status: "Active",
       assignments: [
         { staffId: "s1", role: "Lead",     hours: 20, tasks: ["Strategy deck","Logo concepts"], notes: "Client prefers weekly check-ins" },
         { staffId: "s3", role: "Designer", hours: 15, tasks: ["Colour palette","Typography"],   notes: "" },
@@ -85,7 +85,7 @@ const DEFAULT_DATA = {
     },
     {
       id: "p2", name: "Website Redesign", projectId: "PRJ-002", client: "Beta Industries",
-      priority: "High", status: "Active", startDate: "2026-02-01", endDate: "2026-06-15",
+      priority: "High", status: "Active",
       assignments: [
         { staffId: "s2", role: "PM",        hours: 10, tasks: ["Timeline","Client calls"],      notes: "Covering for Sam during leave" },
         { staffId: "s4", role: "Developer", hours: 30, tasks: ["Frontend build","CMS setup"],   notes: "" },
@@ -94,7 +94,7 @@ const DEFAULT_DATA = {
     },
     {
       id: "p3", name: "Q2 Campaign", projectId: "PRJ-003", client: "Gamma LLC",
-      priority: "Medium", status: "Active", startDate: "2026-03-01", endDate: "2026-05-01",
+      priority: "Medium", status: "Active",
       assignments: [
         { staffId: "s1", role: "Strategist", hours: 8,  tasks: ["Brief","Media plan"],          notes: "" },
         { staffId: "s2", role: "Copywriter", hours: 12, tasks: ["Ad copy","Email series"],      notes: "Needs tone guide approval first" },
@@ -102,7 +102,7 @@ const DEFAULT_DATA = {
     },
     {
       id: "p4", name: "Annual Report", projectId: "PRJ-004", client: "Delta Group",
-      priority: "Low", status: "On Hold", startDate: "2026-03-15", endDate: "2026-07-01",
+      priority: "Low", status: "On Hold",
       assignments: [
         { staffId: "s3", role: "Designer", hours: 20, tasks: ["Layout","Infographics"], notes: "Paused — awaiting client content" },
       ],
@@ -231,24 +231,24 @@ function buildExportRows(staffRows) {
     .sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99))
     .forEach(s => {
       if (!s.myProjects.length) {
-        out.push({ staff:s.name, project:"—", projectId:"", client:"", role:"", hours:"", priority:"", status:"", due:"", tasks:"", notes:"Available — no active projects" });
+        out.push({ staff:s.name, project:"—", projectId:"", client:"", location:"", role:"", hours:"", priority:"", status:"", tasks:"", notes:"Available — no active projects" });
         return;
       }
       s.myProjects.forEach(p => {
         const a = p.assignment;
-        out.push({ staff:s.name, project:p.name, projectId:p.projectId||"", client:p.client, role:a.role||"", hours:a.hours, priority:p.priority, status:p.status, due:p.endDate, tasks:(a.tasks||[]).join(", "), notes:a.notes||"" });
+        out.push({ staff:s.name, project:p.name, projectId:p.projectId||"", client:p.client, location:p.location||"", role:a.role||"", hours:a.hours, priority:p.priority, status:p.status, tasks:(a.tasks||[]).join(", "), notes:a.notes||"" });
       });
     });
   return out;
 }
 
 function exportExcel(staffRows) {
-  const headers = ["Staff Member","Project","Project ID","Client","Role","Hrs/Wk","Priority","Status","Due Date","Tasks","Notes"];
+  const headers = ["Staff Member","Project","Project ID","Client","Location","Role","Hrs/Wk","Priority","Status","Tasks","Notes"];
   const rows = buildExportRows(staffRows);
-  const data = [headers, ...rows.map(r=>[r.staff,r.project,r.projectId,r.client,r.role,r.hours,r.priority,r.status,r.due,r.tasks,r.notes])];
+  const data = [headers, ...rows.map(r=>[r.staff,r.project,r.projectId,r.client,r.location,r.role,r.hours,r.priority,r.status,r.tasks,r.notes])];
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws["!cols"] = [20,22,10,18,14,7,10,11,12,30,32].map(w=>({wch:w}));
+  ws["!cols"] = [20,22,10,18,16,14,7,10,11,30,32].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb, ws, "Staffing Meeting");
   XLSX.writeFile(wb, `staffing-${new Date().toISOString().slice(0,10)}.xlsx`);
 }
@@ -256,17 +256,17 @@ function exportExcel(staffRows) {
 function exportPDF(staffRows) {
   const rows = buildExportRows(staffRows);
   const date = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
-  const pc = { High:"#dc2626", Medium:"#d97706", Low:"#16a34a" };
+  const pc = { High:"#dc2626", Medium:"#d97706", Low:"#16a34a", "On-Hold":"#94a3b8" };
   const sc = { Active:"#0284c7", "On Hold":"#d97706", Complete:"#16a34a", Planning:"#7c3aed" };
   const trs = rows.map(r=>`<tr>
     <td style="font-weight:600">${r.staff}</td>
     <td style="font-weight:600">${r.project}</td>
     <td style="color:#94a3b8;font-size:10px">${r.projectId}</td>
-    <td>${r.client}</td><td>${r.role}</td>
+    <td>${r.client}</td><td style="color:#475569;font-size:10px">${r.location}</td><td>${r.role}</td>
     <td style="text-align:center;font-weight:600">${r.hours}</td>
     <td>${r.priority?`<span style="padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:${pc[r.priority]}18;color:${pc[r.priority]};border:1px solid ${pc[r.priority]}44">${r.priority}</span>`:""}</td>
     <td>${r.status?`<span style="padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:${sc[r.status]}18;color:${sc[r.status]};border:1px solid ${sc[r.status]}44">${r.status}</span>`:""}</td>
-    <td style="white-space:nowrap;color:#475569">${r.due}</td>
+    <td style="color:#475569;font-size:10px">${r.location}</td>
     <td style="color:#475569;font-size:10px">${r.tasks}</td>
     <td style="color:#4f46e5;font-style:italic;font-size:10px">${r.notes}</td>
   </tr>`).join("");
@@ -280,7 +280,7 @@ function exportPDF(staffRows) {
   </head><body>
   <div class="hdr"><div><h1>⬡ StaffFlow — Staffing Meeting</h1><div style="font-size:11px;color:#64748b;margin-top:3px">Generated ${date}</div></div>
   <div style="font-size:11px;color:#94a3b8">${rows.length} assignments</div></div>
-  <table><thead><tr><th>Staff</th><th>Project</th><th>ID</th><th>Client</th><th>Role</th><th>Hrs/Wk</th><th>Priority</th><th>Status</th><th>Due</th><th>Tasks</th><th>Notes</th></tr></thead>
+  <table><thead><tr><th>Staff</th><th>Project</th><th>ID</th><th>Client</th><th>Location</th><th>Role</th><th>Hrs/Wk</th><th>Priority</th><th>Status</th><th>Tasks</th><th>Notes</th></tr></thead>
   <tbody>${trs}</tbody></table>
   <script>window.onload=()=>{window.focus();window.print()}<\/script></body></html>`;
   const w = window.open("","_blank","width=1300,height=850");
@@ -371,7 +371,6 @@ function App() {
     list.sort((a,b)=>{
       if (sortProj==="priority") return PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority];
       if (sortProj==="name")     return a.name.localeCompare(b.name);
-      if (sortProj==="endDate")  return new Date(a.endDate)-new Date(b.endDate);
       return a.status.localeCompare(b.status);
     });
     return list;
@@ -464,7 +463,7 @@ function App() {
             {view!=="meeting" && <FilterSel value={filterStatus} onChange={setFilterStatus} options={[{value:"All",label:"All Statuses"},...STATUSES.map(s=>({value:s,label:s}))]}/>}
             {view==="projects" && <>
               <FilterSel value={filterStaffId} onChange={setFilterStaffId} options={[{value:"All",label:"All Staff"},...staff.map(s=>({value:s.id,label:s.name}))]}/>
-              <FilterSel value={sortProj} onChange={setSortProj} options={[{value:"priority",label:"↑ Priority"},{value:"name",label:"A–Z"},{value:"endDate",label:"Due Date"},{value:"status",label:"Status"}]}/>
+              <FilterSel value={sortProj} onChange={setSortProj} options={[{value:"priority",label:"↑ Priority"},{value:"name",label:"A–Z"},{value:"status",label:"Status"}]}/>
             </>}
             {view==="staff" && filterStaffId!=="All" && (
               <button onClick={()=>setFilterStaffId("All")} style={{ background:"var(--accent-bg)", border:"1px solid var(--accent-border)", color:"var(--accent)", borderRadius:7, padding:"5px 10px", cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>
@@ -587,49 +586,126 @@ function ProjectCard({ p, staff, onClick }) {
 }
 
 // ── MeetingView ───────────────────────────────────────────────────────────────
-function MeetingView({ staffRows }) {
+function MeetingView({ staffRows, projects, staff }) {
+  const [groupBy, setGroupBy] = useState("staff");
   const thS = { textAlign:"left", padding:"9px 13px", fontSize:10, color:"var(--text-muted)", fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", background:"var(--th-bg)", whiteSpace:"nowrap" };
   const tdS = { padding:"10px 13px", fontSize:12, borderBottom:"1px solid var(--border)", verticalAlign:"top" };
-  const sorted = [...staffRows].sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99));
-  const rows = [];
-  sorted.forEach(s=>{
-    if(!s.myProjects.length){rows.push({staffName:s.name,project:null});return;}
-    s.myProjects.forEach((p,pi)=>rows.push({staffName:pi===0?s.name:null,project:p,rowSpan:pi===0?s.myProjects.length:0}));
-  });
+
+  const staffTableRows = (() => {
+    const sorted = [...staffRows].sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99));
+    const rows = [];
+    sorted.forEach(s=>{
+      if(!s.myProjects.length){rows.push({kind:"empty-staff",staffName:s.name});return;}
+      s.myProjects.forEach((p,pi)=>rows.push({kind:"staff-row",staffName:pi===0?s.name:null,project:p,rowSpan:pi===0?s.myProjects.length:0}));
+    });
+    return rows;
+  })();
+
+  const projectTableRows = (() => {
+    const sorted = [...projects].sort((a,b)=>PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority]);
+    const rows = [];
+    sorted.forEach(p=>{
+      if(!p.assignments.length){rows.push({kind:"empty-project",project:p});return;}
+      p.assignments.forEach((a,ai)=>{
+        const member=staff.find(s=>s.id===a.staffId);
+        rows.push({kind:"project-row",showProject:ai===0,project:p,assignment:a,member,rowSpan:ai===0?p.assignments.length:0});
+      });
+    });
+    return rows;
+  })();
+
+  function TabBtn({id,label}) {
+    const active=groupBy===id;
+    return <button onClick={()=>setGroupBy(id)} style={{ padding:"6px 18px", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", background:active?"var(--accent-bg)":"none", border:active?"1px solid var(--accent-border)":"1px solid transparent", color:active?"var(--accent)":"var(--text-muted)" }}>{label}</button>;
+  }
+
   return (
     <div>
-      <p style={{ fontSize:13, color:"#475569", margin:"0 0 16px" }}>Sorted by priority · staff with highest-priority projects listed first</p>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+        <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>
+          {groupBy==="staff" ? "Sorted by priority · staff with highest-priority projects listed first" : "Sorted by priority · one row per project with assigned staff listed underneath"}
+        </p>
+        <div style={{ display:"flex", background:"var(--bg-card-head)", border:"1px solid var(--border)", borderRadius:9, padding:3, gap:2 }}>
+          <TabBtn id="staff"   label="◈ By Staff"   />
+          <TabBtn id="project" label="◉ By Project" />
+        </div>
+      </div>
+
       <div style={{ overflowX:"auto", borderRadius:12, border:"1px solid var(--border)" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead><tr>{["Staff","Project","ID","Client","Role","Hrs/Wk","Priority","Status","Due","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((row,i)=>{
-              const bg=i%2===0?"var(--row-even)":"var(--row-odd)";
-              if(!row.project)return(
-                <tr key={i} style={{ background:bg }}>
-                  <td style={tdS}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)" }}>{row.staffName}</span></div></td>
-                  <td style={{ ...tdS, color:"#334155", fontStyle:"italic" }} colSpan={10}>Available — no active projects</td>
-                </tr>
-              );
-              const p=row.project;const a=p.assignment;
-              return(
-                <tr key={i} style={{ background:bg }}>
-                  {row.staffName&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)", fontSize:13 }}>{row.staffName}</span></div></td>}
-                  <td style={{ ...tdS, fontWeight:600, color:"#e2e8f0", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}`, color:"var(--text-primary)" }}>{p.name}</td>
-                  <td style={{ ...tdS, color:"#334155" }}>{p.projectId}</td>
-                  <td style={{ ...tdS, color:"var(--text-muted)" }}>{p.client}</td>
-                  <td style={{ ...tdS, color:"#94a3b8" }}>{a.role||"—"}</td>
-                  <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
-                  <td style={tdS}><PriorityPip priority={p.priority}/></td>
-                  <td style={tdS}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>
-                  <td style={{ ...tdS, color:"var(--text-muted)", whiteSpace:"nowrap" }}>{p.endDate}</td>
-                  <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"var(--tag-bg)", border:"1px solid var(--tag-border)", borderRadius:4, padding:"1px 6px", color:"var(--tag-text)" }}>{t}</span>)}</div></td>
-                  <td style={{ ...tdS, color:"var(--accent)", fontSize:11, fontStyle:"italic", maxWidth:200 }}>{a.notes||""}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+
+        {groupBy==="staff" && (
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead><tr>{["Staff","Project","ID","Client","Role","Hrs/Wk","Priority","Status","Location","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>
+              {staffTableRows.map((row,i)=>{
+                const bg=i%2===0?"var(--row-even)":"var(--row-odd)";
+                if(row.kind==="empty-staff") return(
+                  <tr key={i} style={{ background:bg }}>
+                    <td style={tdS}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)" }}>{row.staffName}</span></div></td>
+                    <td style={{ ...tdS, color:"var(--text-faint)", fontStyle:"italic" }} colSpan={10}>Available — no active projects</td>
+                  </tr>
+                );
+                const p=row.project; const a=p.assignment;
+                return(
+                  <tr key={i} style={{ background:bg }}>
+                    {row.staffName&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)", fontSize:13 }}>{row.staffName}</span></div></td>}
+                    <td style={{ ...tdS, fontWeight:600, color:"var(--text-primary)", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}` }}>{p.name}</td>
+                    <td style={{ ...tdS, color:"var(--text-faint)" }}>{p.projectId}</td>
+                    <td style={{ ...tdS, color:"var(--text-muted)" }}>{p.client}</td>
+                    <td style={{ ...tdS, color:"var(--text-subtle)" }}>{a.role||"—"}</td>
+                    <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
+                    <td style={tdS}><PriorityPip priority={p.priority}/></td>
+                    <td style={tdS}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>
+                    <td style={{ ...tdS, color:"var(--text-muted)" }}>{p.location||""}</td>
+                    <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"var(--tag-bg)", border:"1px solid var(--tag-border)", borderRadius:4, padding:"1px 6px", color:"var(--tag-text)" }}>{t}</span>)}</div></td>
+                    <td style={{ ...tdS, color:"var(--accent)", fontSize:11, fontStyle:"italic", maxWidth:180 }}>{a.notes||""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {groupBy==="project" && (
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead><tr>{["Project","ID","Client","Priority","Status","Staff Member","Role","Hrs/Wk","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <tbody>
+              {projectTableRows.map((row,i)=>{
+                const bg=i%2===0?"var(--row-even)":"var(--row-odd)";
+                if(row.kind==="empty-project") return(
+                  <tr key={i} style={{ background:bg }}>
+                    <td style={{ ...tdS, fontWeight:600, color:"var(--text-primary)", borderLeft:`3px solid ${PRIORITY_COLOR[row.project.priority]}` }}>{row.project.name}</td>
+                    <td style={{ ...tdS, color:"var(--text-faint)" }}>{row.project.projectId}</td>
+                    <td style={{ ...tdS, color:"var(--text-muted)" }}>{row.project.client}</td>
+                    <td style={tdS}><PriorityPip priority={row.project.priority}/></td>
+                    <td style={tdS}><Badge label={row.project.status} color={STATUS_COLOR[row.project.status]}/></td>
+                    <td style={{ ...tdS, color:"var(--text-faint)", fontStyle:"italic" }} colSpan={5}>No staff assigned</td>
+                  </tr>
+                );
+                const {project:p, assignment:a, member} = row;
+                return(
+                  <tr key={i} style={{ background:bg }}>
+                    {row.showProject&&<td style={{ ...tdS, fontWeight:600, color:"var(--text-primary)", verticalAlign:"middle", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}` }} rowSpan={row.rowSpan}>{p.name}</td>}
+                    {row.showProject&&<td style={{ ...tdS, color:"var(--text-faint)", verticalAlign:"middle" }} rowSpan={row.rowSpan}>{p.projectId}</td>}
+                    {row.showProject&&<td style={{ ...tdS, color:"var(--text-muted)", verticalAlign:"middle" }} rowSpan={row.rowSpan}>{p.client}</td>}
+                    {row.showProject&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><PriorityPip priority={p.priority}/></td>}
+                    {row.showProject&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>}
+                    <td style={tdS}>
+                      {member
+                        ? <div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={member.name} size={22}/><span style={{ fontWeight:600, color:"var(--text-body)" }}>{member.name}</span></div>
+                        : <span style={{ color:"var(--text-faint)", fontStyle:"italic" }}>Unknown</span>}
+                    </td>
+                    <td style={{ ...tdS, color:"var(--text-subtle)" }}>{a.role||"—"}</td>
+                    <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
+                    <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"var(--tag-bg)", border:"1px solid var(--tag-border)", borderRadius:4, padding:"1px 6px", color:"var(--tag-text)" }}>{t}</span>)}</div></td>
+                    <td style={{ ...tdS, color:"var(--accent)", fontSize:11, fontStyle:"italic", maxWidth:180 }}>{a.notes||""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
       </div>
     </div>
   );
@@ -650,8 +726,9 @@ function TaskInput({ value, onChange }) {
 // ── ProjectModal ──────────────────────────────────────────────────────────────
 function ProjectModal({ project, staff, onSave, onDelete, onClose }) {
   const isNew = !project.id;
-  const [form,setForm] = useState({ id:project.id||"", name:project.name||"", projectId:project.projectId||"", client:project.client||"", priority:project.priority||"Medium", status:project.status||"Active", startDate:project.startDate||"", endDate:project.endDate||"", assignments:project.assignments?JSON.parse(JSON.stringify(project.assignments)):[] });
+  const [form,setForm] = useState({ id:project.id||"", name:project.name||"", projectId:project.projectId||"", client:project.client||"", location:project.location||"", priority:project.priority||"Medium", status:project.status||"Active", assignments:project.assignments?JSON.parse(JSON.stringify(project.assignments)):[] });
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  function setStatus(v){setForm(f=>({...f,status:v,priority:v==="On Hold"?"On-Hold":(f.priority==="On-Hold"?"Medium":f.priority)}));}
   function addAssignment(){
     const used=new Set(form.assignments.map(a=>a.staffId));
     const avail=staff.filter(s=>!used.has(s.id));
@@ -666,9 +743,8 @@ function ProjectModal({ project, staff, onSave, onDelete, onClose }) {
         <div><Lbl t="Project ID"/><input style={inputSt} value={form.projectId} onChange={e=>set("projectId",e.target.value)} placeholder="PRJ-001"/></div>
         <div><Lbl t="Client / Department"/><input style={inputSt} value={form.client} onChange={e=>set("client",e.target.value)} placeholder="Client name"/></div>
         <div><Lbl t="Priority"/><select style={inputSt} value={form.priority} onChange={e=>set("priority",e.target.value)}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></div>
-        <div><Lbl t="Status"/><select style={inputSt} value={form.status} onChange={e=>set("status",e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
-        <div><Lbl t="Start Date"/><input style={inputSt} type="date" value={form.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
-        <div><Lbl t="End Date"/><input style={inputSt} type="date" value={form.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
+        <div><Lbl t="Status"/><select style={inputSt} value={form.status} onChange={e=>setStatus(e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
+        <div style={{ gridColumn:"1/-1" }}><Lbl t="City / Site Location"/><input style={inputSt} value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="e.g. New York, Site B"/></div>
       </div>
       <div style={{ marginTop:18 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
@@ -696,6 +772,24 @@ function ProjectModal({ project, staff, onSave, onDelete, onClose }) {
     </Modal>
   );
 }
+
+// ── StaffModal ────────────────────────────────────────────────────────────────
+function StaffModal({ member, onSave, onDelete, onClose }) {
+  const isNew = !member.id;
+  const [name,setName] = useState(member.name||"");
+  return (
+    <Modal title={isNew?"Add Staff Member":"Edit Staff Member"} onClose={onClose}>
+      <Lbl t="Full Name"/>
+      <input style={inputSt} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" autoFocus/>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+        {!isNew&&<Btn variant="danger" onClick={()=>onDelete(member.id)} style={{ marginRight:"auto" }}>Remove</Btn>}
+        <Btn onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={()=>name.trim()&&onSave({id:member.id,name:name.trim()})}>Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 // Mount
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App/>);
