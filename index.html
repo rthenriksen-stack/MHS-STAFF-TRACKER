@@ -587,126 +587,49 @@ function ProjectCard({ p, staff, onClick }) {
 }
 
 // ── MeetingView ───────────────────────────────────────────────────────────────
-function MeetingView({ staffRows, projects, staff }) {
-  const [groupBy, setGroupBy] = useState("staff");
+function MeetingView({ staffRows }) {
   const thS = { textAlign:"left", padding:"9px 13px", fontSize:10, color:"var(--text-muted)", fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", background:"var(--th-bg)", whiteSpace:"nowrap" };
   const tdS = { padding:"10px 13px", fontSize:12, borderBottom:"1px solid var(--border)", verticalAlign:"top" };
-
-  const staffTableRows = (() => {
-    const sorted = [...staffRows].sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99));
-    const rows = [];
-    sorted.forEach(s=>{
-      if(!s.myProjects.length){rows.push({kind:"empty-staff",staffName:s.name});return;}
-      s.myProjects.forEach((p,pi)=>rows.push({kind:"staff-row",staffName:pi===0?s.name:null,project:p,rowSpan:pi===0?s.myProjects.length:0}));
-    });
-    return rows;
-  })();
-
-  const projectTableRows = (() => {
-    const sorted = [...projects].sort((a,b)=>PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority]);
-    const rows = [];
-    sorted.forEach(p=>{
-      if(!p.assignments.length){rows.push({kind:"empty-project",project:p});return;}
-      p.assignments.forEach((a,ai)=>{
-        const member=staff.find(s=>s.id===a.staffId);
-        rows.push({kind:"project-row",showProject:ai===0,project:p,assignment:a,member,rowSpan:ai===0?p.assignments.length:0});
-      });
-    });
-    return rows;
-  })();
-
-  function TabBtn({id,label}) {
-    const active=groupBy===id;
-    return <button onClick={()=>setGroupBy(id)} style={{ padding:"6px 18px", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", background:active?"var(--accent-bg)":"none", border:active?"1px solid var(--accent-border)":"1px solid transparent", color:active?"var(--accent)":"var(--text-muted)" }}>{label}</button>;
-  }
-
+  const sorted = [...staffRows].sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99));
+  const rows = [];
+  sorted.forEach(s=>{
+    if(!s.myProjects.length){rows.push({staffName:s.name,project:null});return;}
+    s.myProjects.forEach((p,pi)=>rows.push({staffName:pi===0?s.name:null,project:p,rowSpan:pi===0?s.myProjects.length:0}));
+  });
   return (
     <div>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-        <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>
-          {groupBy==="staff" ? "Sorted by priority · staff with highest-priority projects listed first" : "Sorted by priority · one row per project with assigned staff listed underneath"}
-        </p>
-        <div style={{ display:"flex", background:"var(--bg-card-head)", border:"1px solid var(--border)", borderRadius:9, padding:3, gap:2 }}>
-          <TabBtn id="staff"   label="◈ By Staff"   />
-          <TabBtn id="project" label="◉ By Project" />
-        </div>
-      </div>
-
+      <p style={{ fontSize:13, color:"#475569", margin:"0 0 16px" }}>Sorted by priority · staff with highest-priority projects listed first</p>
       <div style={{ overflowX:"auto", borderRadius:12, border:"1px solid var(--border)" }}>
-
-        {groupBy==="staff" && (
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead><tr>{["Staff","Project","ID","Client","Role","Hrs/Wk","Priority","Status","Due","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-            <tbody>
-              {staffTableRows.map((row,i)=>{
-                const bg=i%2===0?"var(--row-even)":"var(--row-odd)";
-                if(row.kind==="empty-staff") return(
-                  <tr key={i} style={{ background:bg }}>
-                    <td style={tdS}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)" }}>{row.staffName}</span></div></td>
-                    <td style={{ ...tdS, color:"var(--text-faint)", fontStyle:"italic" }} colSpan={10}>Available — no active projects</td>
-                  </tr>
-                );
-                const p=row.project; const a=p.assignment;
-                return(
-                  <tr key={i} style={{ background:bg }}>
-                    {row.staffName&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)", fontSize:13 }}>{row.staffName}</span></div></td>}
-                    <td style={{ ...tdS, fontWeight:600, color:"var(--text-primary)", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}` }}>{p.name}</td>
-                    <td style={{ ...tdS, color:"var(--text-faint)" }}>{p.projectId}</td>
-                    <td style={{ ...tdS, color:"var(--text-muted)" }}>{p.client}</td>
-                    <td style={{ ...tdS, color:"var(--text-subtle)" }}>{a.role||"—"}</td>
-                    <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
-                    <td style={tdS}><PriorityPip priority={p.priority}/></td>
-                    <td style={tdS}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>
-                    <td style={{ ...tdS, color:"var(--text-muted)", whiteSpace:"nowrap" }}>{p.endDate||""}</td>
-                    <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"var(--tag-bg)", border:"1px solid var(--tag-border)", borderRadius:4, padding:"1px 6px", color:"var(--tag-text)" }}>{t}</span>)}</div></td>
-                    <td style={{ ...tdS, color:"var(--accent)", fontSize:11, fontStyle:"italic", maxWidth:180 }}>{a.notes||""}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-
-        {groupBy==="project" && (
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead><tr>{["Project","ID","Client","Priority","Status","Staff Member","Role","Hrs/Wk","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-            <tbody>
-              {projectTableRows.map((row,i)=>{
-                const bg=i%2===0?"var(--row-even)":"var(--row-odd)";
-                if(row.kind==="empty-project") return(
-                  <tr key={i} style={{ background:bg }}>
-                    <td style={{ ...tdS, fontWeight:600, color:"var(--text-primary)", borderLeft:`3px solid ${PRIORITY_COLOR[row.project.priority]}` }}>{row.project.name}</td>
-                    <td style={{ ...tdS, color:"var(--text-faint)" }}>{row.project.projectId}</td>
-                    <td style={{ ...tdS, color:"var(--text-muted)" }}>{row.project.client}</td>
-                    <td style={tdS}><PriorityPip priority={row.project.priority}/></td>
-                    <td style={tdS}><Badge label={row.project.status} color={STATUS_COLOR[row.project.status]}/></td>
-                    <td style={{ ...tdS, color:"var(--text-faint)", fontStyle:"italic" }} colSpan={5}>No staff assigned</td>
-                  </tr>
-                );
-                const {project:p, assignment:a, member} = row;
-                return(
-                  <tr key={i} style={{ background:bg }}>
-                    {row.showProject&&<td style={{ ...tdS, fontWeight:600, color:"var(--text-primary)", verticalAlign:"middle", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}` }} rowSpan={row.rowSpan}>{p.name}</td>}
-                    {row.showProject&&<td style={{ ...tdS, color:"var(--text-faint)", verticalAlign:"middle" }} rowSpan={row.rowSpan}>{p.projectId}</td>}
-                    {row.showProject&&<td style={{ ...tdS, color:"var(--text-muted)", verticalAlign:"middle" }} rowSpan={row.rowSpan}>{p.client}</td>}
-                    {row.showProject&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><PriorityPip priority={p.priority}/></td>}
-                    {row.showProject&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>}
-                    <td style={tdS}>
-                      {member
-                        ? <div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={member.name} size={22}/><span style={{ fontWeight:600, color:"var(--text-body)" }}>{member.name}</span></div>
-                        : <span style={{ color:"var(--text-faint)", fontStyle:"italic" }}>Unknown</span>}
-                    </td>
-                    <td style={{ ...tdS, color:"var(--text-subtle)" }}>{a.role||"—"}</td>
-                    <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
-                    <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"var(--tag-bg)", border:"1px solid var(--tag-border)", borderRadius:4, padding:"1px 6px", color:"var(--tag-text)" }}>{t}</span>)}</div></td>
-                    <td style={{ ...tdS, color:"var(--accent)", fontSize:11, fontStyle:"italic", maxWidth:180 }}>{a.notes||""}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead><tr>{["Staff","Project","ID","Client","Role","Hrs/Wk","Priority","Status","Due","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((row,i)=>{
+              const bg=i%2===0?"var(--row-even)":"var(--row-odd)";
+              if(!row.project)return(
+                <tr key={i} style={{ background:bg }}>
+                  <td style={tdS}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)" }}>{row.staffName}</span></div></td>
+                  <td style={{ ...tdS, color:"#334155", fontStyle:"italic" }} colSpan={10}>Available — no active projects</td>
+                </tr>
+              );
+              const p=row.project;const a=p.assignment;
+              return(
+                <tr key={i} style={{ background:bg }}>
+                  {row.staffName&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"var(--text-primary)", fontSize:13 }}>{row.staffName}</span></div></td>}
+                  <td style={{ ...tdS, fontWeight:600, color:"#e2e8f0", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}`, color:"var(--text-primary)" }}>{p.name}</td>
+                  <td style={{ ...tdS, color:"#334155" }}>{p.projectId}</td>
+                  <td style={{ ...tdS, color:"var(--text-muted)" }}>{p.client}</td>
+                  <td style={{ ...tdS, color:"#94a3b8" }}>{a.role||"—"}</td>
+                  <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
+                  <td style={tdS}><PriorityPip priority={p.priority}/></td>
+                  <td style={tdS}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>
+                  <td style={{ ...tdS, color:"var(--text-muted)", whiteSpace:"nowrap" }}>{p.endDate}</td>
+                  <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"var(--tag-bg)", border:"1px solid var(--tag-border)", borderRadius:4, padding:"1px 6px", color:"var(--tag-text)" }}>{t}</span>)}</div></td>
+                  <td style={{ ...tdS, color:"var(--accent)", fontSize:11, fontStyle:"italic", maxWidth:200 }}>{a.notes||""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -773,24 +696,6 @@ function ProjectModal({ project, staff, onSave, onDelete, onClose }) {
     </Modal>
   );
 }
-
-// ── StaffModal ────────────────────────────────────────────────────────────────
-function StaffModal({ member, onSave, onDelete, onClose }) {
-  const isNew = !member.id;
-  const [name,setName] = useState(member.name||"");
-  return (
-    <Modal title={isNew?"Add Staff Member":"Edit Staff Member"} onClose={onClose}>
-      <Lbl t="Full Name"/>
-      <input style={inputSt} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" autoFocus/>
-      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
-        {!isNew&&<Btn variant="danger" onClick={()=>onDelete(member.id)} style={{ marginRight:"auto" }}>Remove</Btn>}
-        <Btn onClick={onClose}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>name.trim()&&onSave({id:member.id,name:name.trim()})}>Save</Btn>
-      </div>
-    </Modal>
-  );
-}
-
 // Mount
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App/>);
