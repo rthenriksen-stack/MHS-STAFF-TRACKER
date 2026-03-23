@@ -556,27 +556,27 @@ function StaffCard({ s, onEditProject, onEditStaff }) {
 // ── ProjectCard ───────────────────────────────────────────────────────────────
 function ProjectCard({ p, staff, onClick }) {
   return (
-    <div onClick={onClick} style={{ background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:12, padding:18, cursor:"pointer", boxShadow:"var(--shadow)" }}>
+    <div onClick={onClick} style={{ background:"#0f1623", border:"1px solid #1a2035", borderRadius:12, padding:18, cursor:"pointer" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
         <div>
-          <div style={{ fontWeight:700, fontSize:15, fontFamily:"'DM Serif Display',serif", color:"var(--text-primary)", marginBottom:2 }}>{p.name}</div>
-          <div style={{ fontSize:12, color:"var(--text-subtle)" }}>{p.projectId&&<span style={{ marginRight:8, color:"var(--text-faint)" }}>{p.projectId}</span>}{p.client}</div>
+          <div style={{ fontWeight:700, fontSize:15, fontFamily:"'DM Serif Display',serif", color:"#f1f5f9", marginBottom:2 }}>{p.name}</div>
+          <div style={{ fontSize:12, color:"#475569" }}>{p.projectId&&<span style={{ marginRight:8, color:"#334155" }}>{p.projectId}</span>}{p.client}</div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end" }}>
           <PriorityPip priority={p.priority}/>
           <Badge label={p.status} color={STATUS_COLOR[p.status]}/>
         </div>
       </div>
-      {p.location&&<div style={{ fontSize:12, color:"var(--text-muted)", marginBottom:8 }}>📍 {p.location}</div>}
-      <div style={{ borderTop:"1px solid var(--border)", paddingTop:10 }}>
+      <div style={{ fontSize:12, color:"#475569", marginBottom:12 }}>📅 {p.startDate} → {p.endDate}</div>
+      <div style={{ borderTop:"1px solid #1a2035", paddingTop:10 }}>
         <div style={{ ...labelSt, marginBottom:8 }}>Team · {p.assignments.length}</div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
           {p.assignments.map(a=>{const s=staff.find(st=>st.id===a.staffId);if(!s)return null;return(
             <div key={a.staffId} style={{ display:"flex", alignItems:"center", gap:6 }}>
               <Avatar name={s.name} size={24}/>
               <div>
-                <div style={{ fontSize:12, fontWeight:600, color:"var(--text-body)" }}>{s.name}</div>
-                <div style={{ fontSize:11, color:"var(--text-subtle)" }}>{a.role}{a.hours?` · ${a.hours}h`:""}</div>
+                <div style={{ fontSize:12, fontWeight:600, color:"#cbd5e1" }}>{s.name}</div>
+                <div style={{ fontSize:11, color:"#475569" }}>{a.role}{a.hours?` · ${a.hours}h`:""}</div>
               </div>
             </div>
           );})}
@@ -585,7 +585,6 @@ function ProjectCard({ p, staff, onClick }) {
     </div>
   );
 }
-
 // ── MeetingView ───────────────────────────────────────────────────────────────
 function MeetingView({ staffRows, projects, staff }) {
   const [groupBy, setGroupBy] = useState("staff");
