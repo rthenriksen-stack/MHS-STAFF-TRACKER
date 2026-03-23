@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StaffFlow</title>
+<title>Design Staff Tracker</title>
 
 <!-- React + Babel for JSX in browser -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -278,7 +278,7 @@ function exportPDF(staffRows) {
   td{padding:7px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top}tr:nth-child(even) td{background:#f8fafc}
   @page{margin:1.5cm;size:landscape}@media print{body{padding:0}}</style>
   </head><body>
-  <div class="hdr"><div><h1>⬡ StaffFlow — Staffing Meeting</h1><div style="font-size:11px;color:#64748b;margin-top:3px">Generated ${date}</div></div>
+  <div class="hdr"><div><h1>⬡ Design Staff Tracker — Staffing Meeting</h1><div style="font-size:11px;color:#64748b;margin-top:3px">Generated ${date}</div></div>
   <div style="font-size:11px;color:#94a3b8">${rows.length} assignments</div></div>
   <table><thead><tr><th>Staff</th><th>Project</th><th>ID</th><th>Client</th><th>Location</th><th>Role</th><th>Hrs/Wk</th><th>Priority</th><th>Status</th><th>Tasks</th><th>Notes</th></tr></thead>
   <tbody>${trs}</tbody></table>
@@ -408,7 +408,7 @@ function App() {
   if (loadStatus==="loading") return (
     <div className={`theme-${theme}`} style={{ minHeight:"100vh", background:"var(--bg-base)", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14 }}>
       <div style={{ fontSize:36, animation:"spin 1.5s linear infinite", display:"inline-block", color:"var(--accent)" }}>⬡</div>
-      <div style={{ color:"var(--text-muted)", fontSize:14 }}>Loading StaffFlow…</div>
+      <div style={{ color:"var(--text-muted)", fontSize:14 }}>Loading Design Staff Tracker…</div>
     </div>
   );
 
@@ -424,7 +424,7 @@ function App() {
         <div style={{ padding:"20px 18px 16px", borderBottom:"1px solid var(--border)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:9 }}>
             <div style={{ width:28, height:28, borderRadius:7, background:"var(--logo-grad)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#fff" }}>⬡</div>
-            <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:17, color:"var(--text-primary)" }}>StaffFlow</span>
+            <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:17, color:"var(--text-primary)" }}>Design Staff Tracker</span>
           </div>
         </div>
 
