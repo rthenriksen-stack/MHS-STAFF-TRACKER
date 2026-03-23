@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StaffFlow</title>
+
+<!-- React + Babel for JSX in browser -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- SheetJS for Excel export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; }
+  body { background: #0a0e1a; color: #e2e8f0; font-family: 'DM Sans', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0f1623; }
+  ::-webkit-scrollbar-thumb { background: #252d42; border-radius: 3px; }
+  select option { background: #181e2e; color: #e2e8f0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURATION — edit these two lines after creating your JSONBin account
+// ─────────────────────────────────────────────────────────────────────────────
+const JSONBIN_BIN_ID  = "69c164fb99b15f1d78364443";   // e.g. "6613f2a1acd3cb34a83f1234"
+const JSONBIN_API_KEY = "$2a$10$vsyB021q6qkIx7G7X/xLjOmyNMWw8TIyrezcrmREWnETMXRRvhEdW";   // e.g. "$2a$10$abcdefg..."
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PRIORITIES     = ["High", "Medium", "Low"];
+const STATUSES       = ["Active", "On Hold", "Complete", "Planning"];
+const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+const PRIORITY_COLOR = { High: "#f43f5e", Medium: "#f59e0b", Low: "#22c55e" };
+const STATUS_COLOR   = { Active: "#38bdf8", "On Hold": "#f59e0b", Complete: "#22c55e", Planning: "#a78bfa" };
+
+const DEFAULT_DATA = {
+  staff: [
+    { id: "s1", name: "Alex Rivera" },
+    { id: "s2", name: "Jordan Kim" },
+    { id: "s3", name: "Morgan Chen" },
+    { id: "s4", name: "Taylor Osei" },
+    { id: "s5", name: "Casey Patel" },
+  ],
+  projects: [
+    {
+      id: "p1", name: "Brand Refresh", projectId: "PRJ-001", client: "Acme Corp",
+      priority: "High", status: "Active", startDate: "2026-01-15", endDate: "2026-04-30",
+      assignments: [
+        { staffId: "s1", role: "Lead",     hours: 20, tasks: ["Strategy deck","Logo concepts"], notes: "Client prefers weekly check-ins" },
+        { staffId: "s3", role: "Designer", hours: 15, tasks: ["Colour palette","Typography"],   notes: "" },
+      ],
+    },
+    {
+      id: "p2", name: "Website Redesign", projectId: "PRJ-002", client: "Beta Industries",
+      priority: "High", status: "Active", startDate: "2026-02-01", endDate: "2026-06-15",
+      assignments: [
+        { staffId: "s2", role: "PM",        hours: 10, tasks: ["Timeline","Client calls"],      notes: "Covering for Sam during leave" },
+        { staffId: "s4", role: "Developer", hours: 30, tasks: ["Frontend build","CMS setup"],   notes: "" },
+        { staffId: "s5", role: "Designer",  hours: 18, tasks: ["Wireframes","Prototypes"],      notes: "First lead role — check in weekly" },
+      ],
+    },
+    {
+      id: "p3", name: "Q2 Campaign", projectId: "PRJ-003", client: "Gamma LLC",
+      priority: "Medium", status: "Active", startDate: "2026-03-01", endDate: "2026-05-01",
+      assignments: [
+        { staffId: "s1", role: "Strategist", hours: 8,  tasks: ["Brief","Media plan"],          notes: "" },
+        { staffId: "s2", role: "Copywriter", hours: 12, tasks: ["Ad copy","Email series"],      notes: "Needs tone guide approval first" },
+      ],
+    },
+    {
+      id: "p4", name: "Annual Report", projectId: "PRJ-004", client: "Delta Group",
+      priority: "Low", status: "On Hold", startDate: "2026-03-15", endDate: "2026-07-01",
+      assignments: [
+        { staffId: "s3", role: "Designer", hours: 20, tasks: ["Layout","Infographics"], notes: "Paused — awaiting client content" },
+      ],
+    },
+  ],
+};
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+// ── JSONBin storage ───────────────────────────────────────────────────────────
+const configured = () => JSONBIN_BIN_ID !== "REPLACE_WITH_YOUR_BIN_ID";
+
+async function remoteLoad() {
+  if (!configured()) return null;
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+      headers: { "X-Master-Key": JSONBIN_API_KEY },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.record || null;
+  } catch { return null; }
+}
+
+async function remoteSave(data) {
+  if (!configured()) return false;
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_API_KEY },
+      body: JSON.stringify(data),
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+// ── Style primitives ──────────────────────────────────────────────────────────
+const inputSt = {
+  width: "100%", background: "#181e2e", border: "1px solid #252d42",
+  borderRadius: 7, color: "#e2e8f0", padding: "8px 11px", fontSize: 13,
+  boxSizing: "border-box", fontFamily: "inherit", outline: "none",
+};
+const labelSt = {
+  display: "block", fontSize: 11, color: "#64748b", marginBottom: 5,
+  fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
+};
+
+function Lbl({ t }) { return <div style={labelSt}>{t}</div>; }
+
+function Badge({ label, color }) {
+  return (
+    <span style={{ display:"inline-block", padding:"2px 9px", borderRadius:99,
+      fontSize:11, fontWeight:700, letterSpacing:".04em",
+      background:color+"22", color, border:`1px solid ${color}44`, whiteSpace:"nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
+function PriorityPip({ priority }) {
+  const c = PRIORITY_COLOR[priority];
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px",
+      borderRadius:99, fontSize:11, fontWeight:700, background:c+"18", color:c, border:`1px solid ${c}44` }}>
+      <span style={{ width:6, height:6, borderRadius:"50%", background:c, display:"inline-block" }}/>
+      {priority}
+    </span>
+  );
+}
+
+function Avatar({ name, size=32 }) {
+  const initials = name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+  const hue = (name.charCodeAt(0)*37 + name.charCodeAt(name.length-1)*19) % 360;
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%",
+      background:`hsl(${hue},55%,28%)`, color:`hsl(${hue},80%,82%)`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:size*0.33, fontWeight:800, flexShrink:0 }}>
+      {initials}
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children, wide }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#00000090", zIndex:200,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+      onClick={onClose}>
+      <div style={{ background:"#0f1623", border:"1px solid #252d42", borderRadius:16,
+        padding:28, width:wide?680:480, maxWidth:"100%", maxHeight:"92vh", overflowY:"auto",
+        animation:"fadeIn .15s ease" }}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
+          <h2 style={{ margin:0, fontSize:18, fontFamily:"'DM Serif Display',serif", color:"#f1f5f9" }}>{title}</h2>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"#475569", cursor:"pointer", fontSize:20 }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Btn({ children, onClick, variant="ghost", style:s }) {
+  const vs = {
+    primary: { background:"linear-gradient(135deg,#4f46e5,#7c3aed)", color:"#fff", border:"none" },
+    ghost:   { background:"none", color:"#94a3b8", border:"1px solid #252d42" },
+    danger:  { background:"none", color:"#f43f5e", border:"1px solid #f43f5e33" },
+  };
+  return <button onClick={onClick} style={{ borderRadius:8, padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"inherit", ...vs[variant], ...s }}>{children}</button>;
+}
+
+function FilterSel({ value, onChange, options }) {
+  const opts = options.map(o=>typeof o==="string"?{value:o,label:o}:o);
+  return (
+    <select value={value} onChange={e=>onChange(e.target.value)}
+      style={{ ...inputSt, width:"auto", height:34, cursor:"pointer" }}>
+      {opts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function buildExportRows(staffRows) {
+  const out = [];
+  [...staffRows]
+    .sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99))
+    .forEach(s => {
+      if (!s.myProjects.length) {
+        out.push({ staff:s.name, project:"—", projectId:"", client:"", role:"", hours:"", priority:"", status:"", due:"", tasks:"", notes:"Available — no active projects" });
+        return;
+      }
+      s.myProjects.forEach(p => {
+        const a = p.assignment;
+        out.push({ staff:s.name, project:p.name, projectId:p.projectId||"", client:p.client, role:a.role||"", hours:a.hours, priority:p.priority, status:p.status, due:p.endDate, tasks:(a.tasks||[]).join(", "), notes:a.notes||"" });
+      });
+    });
+  return out;
+}
+
+function exportExcel(staffRows) {
+  const headers = ["Staff Member","Project","Project ID","Client","Role","Hrs/Wk","Priority","Status","Due Date","Tasks","Notes"];
+  const rows = buildExportRows(staffRows);
+  const data = [headers, ...rows.map(r=>[r.staff,r.project,r.projectId,r.client,r.role,r.hours,r.priority,r.status,r.due,r.tasks,r.notes])];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = [20,22,10,18,14,7,10,11,12,30,32].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, "Staffing Meeting");
+  XLSX.writeFile(wb, `staffing-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function exportPDF(staffRows) {
+  const rows = buildExportRows(staffRows);
+  const date = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+  const pc = { High:"#dc2626", Medium:"#d97706", Low:"#16a34a" };
+  const sc = { Active:"#0284c7", "On Hold":"#d97706", Complete:"#16a34a", Planning:"#7c3aed" };
+  const trs = rows.map(r=>`<tr>
+    <td style="font-weight:600">${r.staff}</td>
+    <td style="font-weight:600">${r.project}</td>
+    <td style="color:#94a3b8;font-size:10px">${r.projectId}</td>
+    <td>${r.client}</td><td>${r.role}</td>
+    <td style="text-align:center;font-weight:600">${r.hours}</td>
+    <td>${r.priority?`<span style="padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:${pc[r.priority]}18;color:${pc[r.priority]};border:1px solid ${pc[r.priority]}44">${r.priority}</span>`:""}</td>
+    <td>${r.status?`<span style="padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;background:${sc[r.status]}18;color:${sc[r.status]};border:1px solid ${sc[r.status]}44">${r.status}</span>`:""}</td>
+    <td style="white-space:nowrap;color:#475569">${r.due}</td>
+    <td style="color:#475569;font-size:10px">${r.tasks}</td>
+    <td style="color:#4f46e5;font-style:italic;font-size:10px">${r.notes}</td>
+  </tr>`).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staffing Meeting — ${date}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1e293b;padding:28px}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #1e2740}
+  h1{font-size:20px;font-weight:800;color:#0f172a}table{width:100%;border-collapse:collapse}
+  th{background:#1e2740;color:#e2e8f0;padding:8px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
+  td{padding:7px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top}tr:nth-child(even) td{background:#f8fafc}
+  @page{margin:1.5cm;size:landscape}@media print{body{padding:0}}</style>
+  </head><body>
+  <div class="hdr"><div><h1>⬡ StaffFlow — Staffing Meeting</h1><div style="font-size:11px;color:#64748b;margin-top:3px">Generated ${date}</div></div>
+  <div style="font-size:11px;color:#94a3b8">${rows.length} assignments</div></div>
+  <table><thead><tr><th>Staff</th><th>Project</th><th>ID</th><th>Client</th><th>Role</th><th>Hrs/Wk</th><th>Priority</th><th>Status</th><th>Due</th><th>Tasks</th><th>Notes</th></tr></thead>
+  <tbody>${trs}</tbody></table>
+  <script>window.onload=()=>{window.focus();window.print()}<\/script></body></html>`;
+  const w = window.open("","_blank","width=1300,height=850");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
+// ── Setup Banner ──────────────────────────────────────────────────────────────
+function SetupBanner() {
+  const [open, setOpen] = useState(true);
+  if (!open) return null;
+  return (
+    <div style={{ background:"#1e1a00", border:"1px solid #f59e0b44", borderRadius:10,
+      padding:"14px 18px", marginBottom:20, display:"flex", gap:12, alignItems:"flex-start" }}>
+      <span style={{ fontSize:18 }}>⚠️</span>
+      <div style={{ flex:1 }}>
+        <div style={{ fontWeight:700, color:"#fbbf24", marginBottom:4 }}>Shared storage not yet configured</div>
+        <div style={{ fontSize:13, color:"#92400e", lineHeight:1.6 }}>
+          Data is currently saved only in this browser. To sync with colleagues, follow the setup instructions included with this file.
+        </div>
+      </div>
+      <button onClick={()=>setOpen(false)} style={{ background:"none", border:"none", color:"#92400e", cursor:"pointer", fontSize:16 }}>✕</button>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+function App() {
+  const [staff,    setStaff]    = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loadStatus, setLoadStatus] = useState("loading");
+  const [saveStatus, setSaveStatus] = useState("idle");
+  const [view,         setView]         = useState("staff");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterStaffId,setFilterStaffId]= useState("All");
+  const [sortProj,     setSortProj]     = useState("priority");
+  const [search,       setSearch]       = useState("");
+  const [modal,        setModal]        = useState(null);
+  const saveTimer   = useRef(null);
+  const initialized = useRef(false);
+
+  // Load on mount
+  useEffect(() => {
+    async function load() {
+      let data = await remoteLoad();
+      if (!data) {
+        // Fall back to localStorage
+        try { const s = localStorage.getItem("staffflow-data"); if (s) data = JSON.parse(s); } catch {}
+      }
+      const d = data || DEFAULT_DATA;
+      setStaff(d.staff || DEFAULT_DATA.staff);
+      setProjects(d.projects || DEFAULT_DATA.projects);
+      setLoadStatus("ready");
+    }
+    load();
+  }, []);
+
+  // Auto-save on change
+  useEffect(() => {
+    if (loadStatus !== "ready") return;
+    if (!initialized.current) { initialized.current = true; return; }
+    setSaveStatus("saving");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const payload = { staff, projects };
+      // Always save to localStorage as backup
+      try { localStorage.setItem("staffflow-data", JSON.stringify(payload)); } catch {}
+      // Save to remote if configured
+      if (configured()) {
+        const ok = await remoteSave(payload);
+        setSaveStatus(ok ? "saved" : "error");
+      } else {
+        setSaveStatus("saved");
+      }
+      setTimeout(() => setSaveStatus("idle"), 2500);
+    }, 800);
+  }, [staff, projects, loadStatus]);
+
+  const filteredProjects = useMemo(() => {
+    let list = [...projects];
+    if (filterStatus !== "All")   list = list.filter(p=>p.status===filterStatus);
+    if (filterStaffId !== "All")  list = list.filter(p=>p.assignments.some(a=>a.staffId===filterStaffId));
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(p=>p.name.toLowerCase().includes(q)||p.client.toLowerCase().includes(q)||(p.projectId||"").toLowerCase().includes(q));
+    }
+    list.sort((a,b)=>{
+      if (sortProj==="priority") return PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority];
+      if (sortProj==="name")     return a.name.localeCompare(b.name);
+      if (sortProj==="endDate")  return new Date(a.endDate)-new Date(b.endDate);
+      return a.status.localeCompare(b.status);
+    });
+    return list;
+  }, [projects,filterStatus,filterStaffId,sortProj,search]);
+
+  const staffRows = useMemo(()=>
+    staff.map(s=>({
+      ...s,
+      myProjects: projects
+        .filter(p=>p.assignments.some(a=>a.staffId===s.id))
+        .filter(p=>filterStatus==="All"||p.status===filterStatus)
+        .sort((a,b)=>PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority])
+        .map(p=>({...p, assignment:p.assignments.find(a=>a.staffId===s.id)})),
+    })),[staff,projects,filterStatus]);
+
+  function saveProject(data) {
+    setProjects(ps=>data.id?ps.map(p=>p.id===data.id?data:p):[...ps,{...data,id:uid()}]);
+    setModal(null);
+  }
+  function deleteProject(id) {
+    if (confirm("Delete this project?")) { setProjects(ps=>ps.filter(p=>p.id!==id)); setModal(null); }
+  }
+  function saveStaffMember(data) {
+    setStaff(ss=>data.id?ss.map(s=>s.id===data.id?data:s):[...ss,{...data,id:uid()}]);
+    setModal(null);
+  }
+  function deleteStaffMember(id) {
+    if (confirm("Remove this staff member?")) {
+      setStaff(ss=>ss.filter(s=>s.id!==id));
+      setProjects(ps=>ps.map(p=>({...p,assignments:p.assignments.filter(a=>a.staffId!==id)})));
+      setModal(null);
+    }
+  }
+
+  if (loadStatus==="loading") return (
+    <div style={{ minHeight:"100vh", background:"#0a0e1a", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14 }}>
+      <div style={{ fontSize:36, animation:"spin 1.5s linear infinite", display:"inline-block" }}>⬡</div>
+      <div style={{ color:"#475569", fontSize:14 }}>Loading StaffFlow…</div>
+    </div>
+  );
+
+  const saveInd = { saving:{color:"#f59e0b",text:"⟳ Saving…"}, saved:{color:"#22c55e",text:"✓ Saved"}, error:{color:"#f43f5e",text:"✕ Save failed"} }[saveStatus];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#0a0e1a", color:"#e2e8f0" }}>
+
+      {/* Sidebar */}
+      <div style={{ position:"fixed", left:0, top:0, bottom:0, width:216,
+        background:"#0f1623", borderRight:"1px solid #1a2035",
+        display:"flex", flexDirection:"column", zIndex:100 }}>
+        <div style={{ padding:"20px 18px 16px", borderBottom:"1px solid #1a2035" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+            <div style={{ width:28, height:28, borderRadius:7, background:"linear-gradient(135deg,#4f46e5,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#fff" }}>⬡</div>
+            <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:17, color:"#f1f5f9" }}>StaffFlow</span>
+          </div>
+        </div>
+
+        <nav style={{ padding:"12px 8px", flex:1, overflowY:"auto" }}>
+          <div style={{ ...labelSt, padding:"0 8px 6px" }}>Views</div>
+          {[["staff","◈","By Staff"],["projects","◉","By Project"],["meeting","⊞","Meeting View"]].map(([key,icon,label])=>(
+            <button key={key} onClick={()=>setView(key)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"8px 10px", borderRadius:8, cursor:"pointer", fontFamily:"inherit", background:view===key?"#4f46e520":"none", border:view===key?"1px solid #4f46e530":"1px solid transparent", color:view===key?"#818cf8":"#64748b", fontSize:13, fontWeight:view===key?700:500, marginBottom:2, textAlign:"left" }}>
+              <span style={{ fontSize:14 }}>{icon}</span>{label}
+            </button>
+          ))}
+          <div style={{ ...labelSt, padding:"16px 8px 6px" }}>Team</div>
+          {staff.map(s=>(
+            <button key={s.id} onClick={()=>{setView("staff");setFilterStaffId(s.id);}} style={{ width:"100%", display:"flex", alignItems:"center", gap:7, padding:"6px 8px", borderRadius:8, cursor:"pointer", fontFamily:"inherit", background:filterStaffId===s.id?"#e2e8f010":"none", border:"1px solid transparent", color:filterStaffId===s.id?"#e2e8f0":"#64748b", fontSize:12, marginBottom:1, textAlign:"left" }}>
+              <Avatar name={s.name} size={20}/>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div style={{ padding:"10px 8px", borderTop:"1px solid #1a2035", display:"flex", flexDirection:"column", gap:6 }}>
+          <button onClick={()=>setModal({type:"editProject",data:{}})} style={{ background:"linear-gradient(135deg,#4f46e5,#7c3aed)", border:"none", color:"#fff", borderRadius:8, padding:"8px 12px", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit", textAlign:"left" }}>+ New Project</button>
+          <button onClick={()=>setModal({type:"editStaff",data:{}})} style={{ background:"#1a2035", border:"1px solid #252d42", color:"#94a3b8", borderRadius:8, padding:"7px 12px", cursor:"pointer", fontSize:12, fontWeight:600, fontFamily:"inherit", textAlign:"left" }}>+ Add Staff</button>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ marginLeft:216, padding:"0 28px 48px" }}>
+        {/* Topbar */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"16px 0", borderBottom:"1px solid #1a2035", position:"sticky", top:0, background:"#0a0e1a", zIndex:50 }}>
+          <h1 style={{ margin:0, fontFamily:"'DM Serif Display',serif", fontSize:20, color:"#f1f5f9", flex:1 }}>
+            {view==="staff"?"Staff Overview":view==="projects"?"All Projects":"Staffing Meeting"}
+          </h1>
+          {saveInd && <span style={{ fontSize:12, color:saveInd.color, fontWeight:600 }}>{saveInd.text}</span>}
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            {view==="projects" && <input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)} style={{ ...inputSt, width:160, height:34 }}/>}
+            {view!=="meeting" && <FilterSel value={filterStatus} onChange={setFilterStatus} options={[{value:"All",label:"All Statuses"},...STATUSES.map(s=>({value:s,label:s}))]}/>}
+            {view==="projects" && <>
+              <FilterSel value={filterStaffId} onChange={setFilterStaffId} options={[{value:"All",label:"All Staff"},...staff.map(s=>({value:s.id,label:s.name}))]}/>
+              <FilterSel value={sortProj} onChange={setSortProj} options={[{value:"priority",label:"↑ Priority"},{value:"name",label:"A–Z"},{value:"endDate",label:"Due Date"},{value:"status",label:"Status"}]}/>
+            </>}
+            {view==="staff" && filterStaffId!=="All" && (
+              <button onClick={()=>setFilterStaffId("All")} style={{ background:"#4f46e518", border:"1px solid #4f46e540", color:"#818cf8", borderRadius:7, padding:"5px 10px", cursor:"pointer", fontSize:12, fontFamily:"inherit" }}>
+                {staff.find(s=>s.id===filterStaffId)?.name} ✕
+              </button>
+            )}
+            {view==="meeting" && (
+              <div style={{ display:"flex", gap:6 }}>
+                <button onClick={()=>exportExcel(staffRows)} style={{ background:"#16532218", border:"1px solid #16532240", color:"#22c55e", borderRadius:8, padding:"7px 13px", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>⬇ Excel</button>
+                <button onClick={()=>exportPDF(staffRows)} style={{ background:"#7c3aed18", border:"1px solid #7c3aed40", color:"#a78bfa", borderRadius:8, padding:"7px 13px", cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"inherit" }}>🖨 Print / PDF</button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ paddingTop:20 }}>
+          {!configured() && <SetupBanner/>}
+
+          {view==="staff" && staffRows.filter(s=>filterStaffId==="All"||s.id===filterStaffId).map(s=>(
+            <StaffCard key={s.id} s={s} onEditProject={p=>setModal({type:"editProject",data:p})} onEditStaff={()=>setModal({type:"editStaff",data:s})}/>
+          ))}
+
+          {view==="projects" && (
+            <div style={{ display:"grid", gap:14, gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))" }}>
+              {filteredProjects.map(p=><ProjectCard key={p.id} p={p} staff={staff} onClick={()=>setModal({type:"editProject",data:p})}/>)}
+              {!filteredProjects.length && <div style={{ gridColumn:"1/-1", textAlign:"center", color:"#334155", padding:"80px 0" }}>No projects match your filters.</div>}
+            </div>
+          )}
+
+          {view==="meeting" && <MeetingView staffRows={staffRows}/>}
+        </div>
+      </div>
+
+      {modal?.type==="editProject" && <ProjectModal project={modal.data} staff={staff} onSave={saveProject} onDelete={deleteProject} onClose={()=>setModal(null)}/>}
+      {modal?.type==="editStaff"   && <StaffModal   member={modal.data}                onSave={saveStaffMember} onDelete={deleteStaffMember} onClose={()=>setModal(null)}/>}
+    </div>
+  );
+}
+
+// ── StaffCard ─────────────────────────────────────────────────────────────────
+function StaffCard({ s, onEditProject, onEditStaff }) {
+  const totalHrs = s.myProjects.reduce((sum,p)=>sum+(p.assignment?.hours||0),0);
+  return (
+    <div style={{ background:"#0f1623", border:"1px solid #1a2035", borderRadius:14, marginBottom:14, overflow:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", background:"#0d1220", borderBottom:"1px solid #1a2035" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:11 }}>
+          <Avatar name={s.name} size={38}/>
+          <div>
+            <div style={{ fontWeight:700, fontSize:15, color:"#f1f5f9" }}>{s.name}</div>
+            <div style={{ fontSize:12, color:"#475569", marginTop:1 }}>{s.myProjects.length} project{s.myProjects.length!==1?"s":""} · {totalHrs} hrs/wk</div>
+          </div>
+        </div>
+        <button onClick={onEditStaff} style={{ background:"none", border:"1px solid #1a2035", color:"#475569", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontSize:11, fontFamily:"inherit" }}>Edit</button>
+      </div>
+      {!s.myProjects.length
+        ? <div style={{ padding:18, fontSize:13, color:"#334155", fontStyle:"italic" }}>No active projects — available for assignment</div>
+        : <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+          {s.myProjects.map(p=>{
+            const a=p.assignment;
+            return (
+              <div key={p.id} onClick={()=>onEditProject(p)} style={{ background:"#0a0e1a", border:"1px solid #1a2035", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}`, borderRadius:10, padding:"12px 14px", cursor:"pointer" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:13, color:"#e2e8f0" }}>{p.name}</div>
+                    <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>{p.projectId&&<span style={{ marginRight:6, color:"#334155" }}>{p.projectId}</span>}{p.client}</div>
+                  </div>
+                  <div style={{ display:"flex", gap:5, flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                    <PriorityPip priority={p.priority}/>
+                    <Badge label={p.status} color={STATUS_COLOR[p.status]}/>
+                  </div>
+                </div>
+                <div style={{ marginTop:9, display:"flex", gap:16, flexWrap:"wrap", fontSize:12, color:"#64748b" }}>
+                  <span><strong style={{ color:"#94a3b8" }}>Role:</strong> {a.role||"—"}</span>
+                  <span><strong style={{ color:"#94a3b8" }}>Hrs/wk:</strong> {a.hours}</span>
+                  <span><strong style={{ color:"#94a3b8" }}>Due:</strong> {p.endDate}</span>
+                </div>
+                {a.tasks?.length>0 && <div style={{ marginTop:8, display:"flex", gap:4, flexWrap:"wrap" }}>{a.tasks.map((t,i)=><span key={i} style={{ fontSize:11, background:"#181e2e", border:"1px solid #252d42", borderRadius:5, padding:"2px 8px", color:"#64748b" }}>{t}</span>)}</div>}
+                {a.notes && <div style={{ marginTop:9, padding:"7px 10px", background:"#4f46e50d", border:"1px solid #4f46e520", borderRadius:7, fontSize:12, color:"#818cf8", fontStyle:"italic" }}>📝 {a.notes}</div>}
+              </div>
+            );
+          })}
+        </div>
+      }
+    </div>
+  );
+}
+
+// ── ProjectCard ───────────────────────────────────────────────────────────────
+function ProjectCard({ p, staff, onClick }) {
+  return (
+    <div onClick={onClick} style={{ background:"#0f1623", border:"1px solid #1a2035", borderRadius:12, padding:18, cursor:"pointer" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+        <div>
+          <div style={{ fontWeight:700, fontSize:15, fontFamily:"'DM Serif Display',serif", color:"#f1f5f9", marginBottom:2 }}>{p.name}</div>
+          <div style={{ fontSize:12, color:"#475569" }}>{p.projectId&&<span style={{ marginRight:8, color:"#334155" }}>{p.projectId}</span>}{p.client}</div>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end" }}>
+          <PriorityPip priority={p.priority}/>
+          <Badge label={p.status} color={STATUS_COLOR[p.status]}/>
+        </div>
+      </div>
+      <div style={{ fontSize:12, color:"#475569", marginBottom:12 }}>📅 {p.startDate} → {p.endDate}</div>
+      <div style={{ borderTop:"1px solid #1a2035", paddingTop:10 }}>
+        <div style={{ ...labelSt, marginBottom:8 }}>Team · {p.assignments.length}</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
+          {p.assignments.map(a=>{const s=staff.find(st=>st.id===a.staffId);if(!s)return null;return(
+            <div key={a.staffId} style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <Avatar name={s.name} size={24}/>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:"#cbd5e1" }}>{s.name}</div>
+                <div style={{ fontSize:11, color:"#475569" }}>{a.role}{a.hours?` · ${a.hours}h`:""}</div>
+              </div>
+            </div>
+          );})}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MeetingView ───────────────────────────────────────────────────────────────
+function MeetingView({ staffRows }) {
+  const thS = { textAlign:"left", padding:"9px 13px", fontSize:10, color:"#475569", fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", borderBottom:"1px solid #1a2035", background:"#0f1623", whiteSpace:"nowrap" };
+  const tdS = { padding:"10px 13px", fontSize:12, borderBottom:"1px solid #0f1623", verticalAlign:"top" };
+  const sorted = [...staffRows].sort((a,b)=>Math.min(...a.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99)-Math.min(...b.myProjects.map(p=>PRIORITY_ORDER[p.priority]),99));
+  const rows = [];
+  sorted.forEach(s=>{
+    if(!s.myProjects.length){rows.push({staffName:s.name,project:null});return;}
+    s.myProjects.forEach((p,pi)=>rows.push({staffName:pi===0?s.name:null,project:p,rowSpan:pi===0?s.myProjects.length:0}));
+  });
+  return (
+    <div>
+      <p style={{ fontSize:13, color:"#475569", margin:"0 0 16px" }}>Sorted by priority · staff with highest-priority projects listed first</p>
+      <div style={{ overflowX:"auto", borderRadius:12, border:"1px solid #1a2035" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead><tr>{["Staff","Project","ID","Client","Role","Hrs/Wk","Priority","Status","Due","Tasks","Notes"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((row,i)=>{
+              const bg=i%2===0?"#0a0e1a":"#0d1220";
+              if(!row.project)return(
+                <tr key={i} style={{ background:bg }}>
+                  <td style={tdS}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"#e2e8f0" }}>{row.staffName}</span></div></td>
+                  <td style={{ ...tdS, color:"#334155", fontStyle:"italic" }} colSpan={10}>Available — no active projects</td>
+                </tr>
+              );
+              const p=row.project;const a=p.assignment;
+              return(
+                <tr key={i} style={{ background:bg }}>
+                  {row.staffName&&<td style={{ ...tdS, verticalAlign:"middle" }} rowSpan={row.rowSpan}><div style={{ display:"flex", alignItems:"center", gap:7 }}><Avatar name={row.staffName} size={24}/><span style={{ fontWeight:700, color:"#e2e8f0", fontSize:13 }}>{row.staffName}</span></div></td>}
+                  <td style={{ ...tdS, fontWeight:600, color:"#e2e8f0", borderLeft:`3px solid ${PRIORITY_COLOR[p.priority]}` }}>{p.name}</td>
+                  <td style={{ ...tdS, color:"#334155" }}>{p.projectId}</td>
+                  <td style={{ ...tdS, color:"#64748b" }}>{p.client}</td>
+                  <td style={{ ...tdS, color:"#94a3b8" }}>{a.role||"—"}</td>
+                  <td style={{ ...tdS, textAlign:"center", fontWeight:600 }}>{a.hours}</td>
+                  <td style={tdS}><PriorityPip priority={p.priority}/></td>
+                  <td style={tdS}><Badge label={p.status} color={STATUS_COLOR[p.status]}/></td>
+                  <td style={{ ...tdS, color:"#64748b", whiteSpace:"nowrap" }}>{p.endDate}</td>
+                  <td style={tdS}><div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>{(a.tasks||[]).map((t,ti)=><span key={ti} style={{ fontSize:10, background:"#181e2e", border:"1px solid #252d42", borderRadius:4, padding:"1px 6px", color:"#64748b" }}>{t}</span>)}</div></td>
+                  <td style={{ ...tdS, color:"#818cf8", fontSize:11, fontStyle:"italic", maxWidth:200 }}>{a.notes||""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── ProjectModal ──────────────────────────────────────────────────────────────
+function ProjectModal({ project, staff, onSave, onDelete, onClose }) {
+  const isNew = !project.id;
+  const [form,setForm] = useState({ id:project.id||"", name:project.name||"", projectId:project.projectId||"", client:project.client||"", priority:project.priority||"Medium", status:project.status||"Active", startDate:project.startDate||"", endDate:project.endDate||"", assignments:project.assignments?JSON.parse(JSON.stringify(project.assignments)):[] });
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  function addAssignment(){
+    const used=new Set(form.assignments.map(a=>a.staffId));
+    const avail=staff.filter(s=>!used.has(s.id));
+    if(!avail.length)return;
+    setForm(f=>({...f,assignments:[...f.assignments,{staffId:avail[0].id,role:"",hours:0,tasks:[],notes:""}]}));
+  }
+  function updA(idx,k,v){setForm(f=>{const a=[...f.assignments];a[idx]={...a[idx],[k]:v};return{...f,assignments:a};});}
+  return (
+    <Modal title={isNew?"New Project":"Edit Project"} onClose={onClose} wide>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:4 }}>
+        <div style={{ gridColumn:"1/-1" }}><Lbl t="Project Name"/><input style={inputSt} value={form.name} onChange={e=>set("name",e.target.value)} placeholder="Project name"/></div>
+        <div><Lbl t="Project ID"/><input style={inputSt} value={form.projectId} onChange={e=>set("projectId",e.target.value)} placeholder="PRJ-001"/></div>
+        <div><Lbl t="Client / Department"/><input style={inputSt} value={form.client} onChange={e=>set("client",e.target.value)} placeholder="Client name"/></div>
+        <div><Lbl t="Priority"/><select style={inputSt} value={form.priority} onChange={e=>set("priority",e.target.value)}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></div>
+        <div><Lbl t="Status"/><select style={inputSt} value={form.status} onChange={e=>set("status",e.target.value)}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
+        <div><Lbl t="Start Date"/><input style={inputSt} type="date" value={form.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
+        <div><Lbl t="End Date"/><input style={inputSt} type="date" value={form.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
+      </div>
+      <div style={{ marginTop:18 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <span style={labelSt}>Team Assignments</span>
+          <button onClick={addAssignment} style={{ background:"#4f46e514", border:"1px solid #4f46e530", color:"#818cf8", borderRadius:6, padding:"4px 12px", cursor:"pointer", fontSize:11, fontFamily:"inherit", fontWeight:700 }}>+ Add Person</button>
+        </div>
+        {form.assignments.map((a,idx)=>(
+          <div key={idx} style={{ background:"#0a0e1a", border:"1px solid #1a2035", borderRadius:10, padding:14, marginBottom:10 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 80px 34px", gap:10, marginBottom:10 }}>
+              <div><Lbl t="Staff Member"/><select style={inputSt} value={a.staffId} onChange={e=>updA(idx,"staffId",e.target.value)}>{staff.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+              <div><Lbl t="Role"/><input style={inputSt} value={a.role} onChange={e=>updA(idx,"role",e.target.value)} placeholder="Lead, Designer…"/></div>
+              <div><Lbl t="Hrs/Wk"/><input style={inputSt} type="number" value={a.hours} onChange={e=>updA(idx,"hours",+e.target.value)}/></div>
+              <button onClick={()=>setForm(f=>({...f,assignments:f.assignments.filter((_,i)=>i!==idx)}))} style={{ background:"none", border:"1px solid #f43f5e22", color:"#f43f5e", borderRadius:6, cursor:"pointer", marginTop:20, fontSize:14 }}>✕</button>
+            </div>
+            <div style={{ marginBottom:10 }}><Lbl t="Tasks (comma-separated)"/><input style={inputSt} value={(a.tasks||[]).join(", ")} onChange={e=>updA(idx,"tasks",e.target.value.split(",").map(t=>t.trim()).filter(Boolean))} placeholder="Task 1, Task 2, Task 3"/></div>
+            <div><Lbl t="Notes"/><input style={inputSt} value={a.notes||""} onChange={e=>updA(idx,"notes",e.target.value)} placeholder="Staffing context, flags, anything worth noting…"/></div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+        {!isNew&&<Btn variant="danger" onClick={()=>onDelete(form.id)} style={{ marginRight:"auto" }}>Delete</Btn>}
+        <Btn onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={()=>form.name.trim()&&onSave(form)}>Save Project</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// ── StaffModal ────────────────────────────────────────────────────────────────
+function StaffModal({ member, onSave, onDelete, onClose }) {
+  const isNew = !member.id;
+  const [name,setName] = useState(member.name||"");
+  return (
+    <Modal title={isNew?"Add Staff Member":"Edit Staff Member"} onClose={onClose}>
+      <Lbl t="Full Name"/>
+      <input style={inputSt} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" autoFocus/>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+        {!isNew&&<Btn variant="danger" onClick={()=>onDelete(member.id)} style={{ marginRight:"auto" }}>Remove</Btn>}
+        <Btn onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={()=>name.trim()&&onSave({id:member.id,name:name.trim()})}>Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// Mount
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>
