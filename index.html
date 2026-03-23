@@ -35,7 +35,7 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React;
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION — edit these two lines after creating your JSONBin account
 // ─────────────────────────────────────────────────────────────────────────────
-const JSONBIN_BIN_ID  = "69c164fb99b15f1d78364443";   // e.g. "6613f2a1acd3cb34a83f1234"
+const JSONBIN_BIN_ID  = "69c16c62b7ec241ddc963aad";   // e.g. "6613f2a1acd3cb34a83f1234"
 const JSONBIN_API_KEY = "$2a$10$vsyB021q6qkIx7G7X/xLjOmyNMWw8TIyrezcrmREWnETMXRRvhEdW";   // e.g. "$2a$10$abcdefg..."
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ const DEFAULT_DATA = {
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 // ── JSONBin storage ───────────────────────────────────────────────────────────
-const configured = () => JSONBIN_BIN_ID !== "REPLACE_WITH_YOUR_BIN_ID";
+const configured = () => JSONBIN_BIN_ID !== "69c16c62b7ec241ddc963aad";
 
 async function remoteLoad() {
   if (!configured()) return null;
