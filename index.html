@@ -342,7 +342,7 @@ function exportPDF(staffRows) {
     .hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1e2740}
     h1{font-size:18px;font-weight:800;color:#0f172a}
     table{width:100%;border-collapse:collapse;table-layout:fixed}
-    @page{margin:1cm;size:landscape}
+    @page{margin:1cm;size:landscape} *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{body{padding:0}}
   </style>
   </head><body>
